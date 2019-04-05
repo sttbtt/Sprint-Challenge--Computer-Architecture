@@ -28,6 +28,11 @@ unsigned char cpu_pop(struct cpu *cpu)
   return value;
 }
 
+void cpu_jump(struct cpu *cpu, unsigned char address)
+{
+  cpu->PC = cpu->reg[address];
+}
+
 void trace(struct cpu *cpu)
 {
     printf("%02X | ", cpu->PC);
@@ -42,6 +47,20 @@ void trace(struct cpu *cpu)
     }
 
     printf("\n");
+}
+
+int nth_bit_to_zero(int n, int x)
+{
+	int mask = ~(1 << n);
+	x = x & mask;
+	return x;
+}
+
+int nth_bit_to_one(int n, int x)
+{
+	int mask = (1 << n);
+	x = x | mask;
+	return x;
 }
 
 /**
@@ -103,8 +122,45 @@ void alu(struct cpu *cpu, enum alu_op op, unsigned char regA, unsigned char regB
     case ALU_DIV:
       reg[regA] /= reg[regB];
       break;
-    
-    // TODO: implement more ALU ops
+ 
+    case ALU_MOD:
+      reg[regA] = reg[regA] % reg[regB];
+      break;
+
+    case ALU_CMP:
+      cpu->FL = 0;
+      if (reg[regA] == reg[regB]) {
+        cpu->FL = nth_bit_to_one(0, cpu->FL);
+      } else if (reg[regA] > reg[regB]) {
+        cpu->FL = nth_bit_to_one(1, cpu->FL);
+      } else if (reg[regA] < reg[regB]) {
+        cpu->FL = nth_bit_to_one(2, cpu->FL);
+      }
+      break;
+
+    case ALU_AND:
+      reg[regA] = reg[regA] & reg[regB];
+      break;
+
+    case ALU_NOT:
+      reg[regA] = ~reg[regA];
+      break;
+
+    case ALU_OR:
+      reg[regA] = reg[regA] | reg[regB];
+      break;
+
+    case ALU_XOR:
+      reg[regA] = reg[regA] ^ reg[regB];
+      break;
+
+    case ALU_SHL:
+      reg[regA] = reg[regA] << reg[regB];
+      break;
+
+    case ALU_SHR:
+      reg[regA] = reg[regA] >> reg[regB];
+      break;
   }
 }
 
@@ -116,13 +172,11 @@ void cpu_run(struct cpu *cpu)
   int running = 1; // True until we get a HLT instruction
 
   while (running) {
-    // TODO
     // 1. Get the value of the current instruction (in address PC).
     unsigned char IR = cpu->ram[cpu->PC];
 
     // 2. Figure out how many operands this next instruction requires
     unsigned int operands = IR >> DATA_LEN;
-    // printf("Operands: %d, IR: %d\n", operands, IR);
 
     // 3. Get the appropriate value(s) of the operands following this instruction
     unsigned char operandA = cpu->ram[(cpu->PC + 1)];
@@ -163,17 +217,23 @@ void cpu_run(struct cpu *cpu)
         cpu->PC += operands + 1;
         break;
 
+      case MOD:
+        if (operandB != 0) {
+          alu(cpu, ALU_MOD, operandA, operandB);
+        cpu->PC += operands + 1;
+        } else {
+          printf("Divide by Zero Error!\n");
+          running = 0;
+        }
+        break;
+
       case PUSH:
         cpu_push(cpu, cpu->reg[operandA]);
-        // cpu->reg[cpu->SP]--;
-        // cpu_ram_write(cpu, cpu->reg[cpu->SP], cpu->reg[operandA]);
         cpu->PC += operands + 1;
         break;
 
       case POP:
         cpu->reg[operandA] = cpu_pop(cpu);
-        // cpu->reg[operandA & cpu->SP] = cpu_ram_read(cpu, cpu->reg[cpu->SP]);
-        // cpu->reg[cpu->SP]++;
         cpu->PC += operands + 1;
         break;
 
@@ -184,6 +244,61 @@ void cpu_run(struct cpu *cpu)
 
       case RET:
         cpu->PC = cpu_pop(cpu);
+        break;
+
+      case CMP:
+        alu(cpu, ALU_CMP, operandA, operandB);
+        cpu->PC += operands + 1;
+        break;
+
+      case AND:
+        alu(cpu, ALU_AND, operandA, operandB);
+        cpu->PC += operands + 1;
+        break;
+
+      case NOT:
+        alu(cpu, ALU_NOT, operandA, 0);
+        cpu->PC += operands + 1;
+        break;
+
+      case OR:
+        alu(cpu, ALU_OR, operandA, operandB);
+        cpu->PC += operands + 1;
+        break;
+
+      case XOR:
+        alu(cpu, ALU_XOR, operandA, operandB);
+        cpu->PC += operands + 1;
+        break;
+      
+      case SHL:
+        alu(cpu, ALU_SHL, operandA, operandB);
+        cpu->PC += operands + 1;
+        break;
+
+      case SHR:
+        alu(cpu, ALU_SHR, operandA, operandB);
+        cpu->PC += operands + 1;
+        break;
+
+      case JMP:
+        cpu_jump(cpu, operandA);
+        break;
+
+      case JEQ:
+        if (cpu->FL & 1) {
+          cpu_jump(cpu, operandA);
+        } else {
+          cpu->PC += operands + 1;
+        }
+        break;
+
+      case JNE:
+        if (!(cpu->FL & 1)) {
+          cpu_jump(cpu, operandA);
+        } else {
+          cpu->PC += operands + 1;
+        }
         break;
 
       case HLT:
@@ -204,11 +319,10 @@ void cpu_run(struct cpu *cpu)
  */
 void cpu_init(struct cpu *cpu)
 {
-  // TODO: Initialize the PC and other special reg
+  // Initialize the PC and other special reg
   cpu->PC = 0;
   cpu->reg[SP] = 0xF4;
+  cpu->FL = 0;
   memset(cpu->reg, 0, sizeof(cpu->reg));
   memset(cpu->ram, 0, sizeof(cpu->ram));
 }
-
-
