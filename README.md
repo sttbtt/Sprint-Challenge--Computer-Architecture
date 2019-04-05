@@ -172,3 +172,4 @@ can deliver on the following optional goals:
 - [ ] Add an `ADDI` extension instruction to add an immediate value to a register
 - [ ] Add timer interrupts
 - [ ] Add keyboard interrupts
+
